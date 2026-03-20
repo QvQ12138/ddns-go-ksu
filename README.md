@@ -1,0 +1,2 @@
+# ddns-go-ksu
+DDNS
