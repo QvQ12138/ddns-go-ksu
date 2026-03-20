@@ -1,0 +1,119 @@
+name: Build DDNS-Go KSU Module
+
+on:
+  workflow_dispatch:
+    inputs:
+      ddns_version:
+        description: 'ddns-go version (e.g. v6.16.2), leave empty for latest'
+        required: false
+        default: ''
+  schedule:
+    - cron: '0 6 * * *'
+  push:
+    branches: [ main ]
+    paths:
+      - 'module/**'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          INPUT_VER="${{ github.event.inputs.ddns_version }}"
+          if [ -n "$INPUT_VER" ]; then
+            VERSION="$INPUT_VER"
+          else
+            VERSION=$(curl -sSL \
+              "https://api.github.com/repos/jeessy2/ddns-go/releases/latest" \
+              | jq -r '.tag_name')
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_num=${VERSION#v}" >> $GITHUB_OUTPUT
+          echo "Resolved: $VERSION"
+
+      - name: Check if release exists
+        id: check
+        run: |
+          TAG="ksu-${{ steps.version.outputs.version }}"
+          STATUS=$(curl -sSL -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+          [ "$STATUS" = "200" ] && echo "exists=true" >> $GITHUB_OUTPUT \
+                                || echo "exists=false" >> $GITHUB_OUTPUT
+
+      - name: Download binary
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          VER_NUM="${{ steps.version.outputs.version_num }}"
+          URL="https://github.com/jeessy2/ddns-go/releases/download/${VER}/ddns-go_${VER_NUM}_android_arm64.tar.gz"
+          echo "Downloading: $URL"
+          curl -sSL "$URL" -o /tmp/ddns-go.tar.gz
+          tar -xzf /tmp/ddns-go.tar.gz -C /tmp/
+          chmod 755 /tmp/ddns-go
+
+      - name: Assemble module
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          VER_NUM="${{ steps.version.outputs.version_num }}"
+          VER_CODE=$(echo "$VER_NUM" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+          MODDIR="/tmp/ksu_module"
+          mkdir -p "$MODDIR/system/bin"
+          mkdir -p "$MODDIR/META-INF/com/google/android"
+
+          cp /tmp/ddns-go "$MODDIR/system/bin/ddns-go"
+
+          cat > "$MODDIR/module.prop" <<EOF
+          id=ddns-go
+          name=DDNS-Go
+          version=${VER}
+          versionCode=${VER_CODE}
+          author=jeessy2 (KSU module by ${{ github.repository_owner }})
+          description=Simple DDNS client. Web UI at http://localhost:9876 after reboot.
+          EOF
+
+          cp module/service.sh    "$MODDIR/service.sh"
+          cp module/customize.sh  "$MODDIR/customize.sh"
+          cp module/update-binary "$MODDIR/META-INF/com/google/android/update-binary"
+          cp module/updater-script "$MODDIR/META-INF/com/google/android/updater-script"
+
+          chmod 755 "$MODDIR/service.sh" "$MODDIR/customize.sh" \
+                    "$MODDIR/META-INF/com/google/android/update-binary"
+
+      - name: Package zip
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VER_NUM="${{ steps.version.outputs.version_num }}"
+          OUTPUT="ddns-go_${VER_NUM}_ksu_arm64.zip"
+          cd /tmp/ksu_module
+          zip -r "/tmp/$OUTPUT" .
+          echo "zip_name=$OUTPUT" >> $GITHUB_ENV
+          echo "zip_path=/tmp/$OUTPUT" >> $GITHUB_ENV
+
+      - name: Create Release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ksu-${{ steps.version.outputs.version }}
+          name: "DDNS-Go ${{ steps.version.outputs.version }} · KSU arm64"
+          body: |
+            自动构建自 [jeessy2/ddns-go](https://github.com/jeessy2/ddns-go) 官方 Release。
+
+            **安装：** KSU Manager → 模块 → 从存储安装 → 选 zip → 重启
+
+            **使用：**
+            - Web UI：`http://<手机IP>:9876`
+            - 配置目录：`/data/local/ddns-go/`
+            - 日志：`/data/local/ddns-go/ddns-go.log`
+
+            上游版本：[${{ steps.version.outputs.version }}](https://github.com/jeessy2/ddns-go/releases/tag/${{ steps.version.outputs.version }})
+          files: ${{ env.zip_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
