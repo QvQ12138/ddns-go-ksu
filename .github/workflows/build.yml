@@ -71,59 +71,55 @@ jobs:
 
           cp /tmp/ddns-go "$MODDIR/system/bin/ddns-go"
 
-          cat > "$MODDIR/module.prop" <<EOF
-id=ddns-go
-name=DDNS-Go
-version=${VER}
-versionCode=${VER_CODE}
-author=jeessy2 (KSU module by ${{ github.repository_owner }})
-description=Simple DDNS client. Web UI at http://localhost:9876 after reboot.
-EOF
+          printf '%s\n' \
+            "id=ddns-go" \
+            "name=DDNS-Go" \
+            "version=${VER}" \
+            "versionCode=${VER_CODE}" \
+            "author=jeessy2 (KSU module by ${{ github.repository_owner }})" \
+            "description=Simple DDNS client. Web UI at http://localhost:9876 after reboot." \
+            > "$MODDIR/module.prop"
 
-          cat > "$MODDIR/service.sh" <<'SCRIPT'
-#!/system/bin/sh
-MODDIR="${0%/*}"
-DDNS_BIN="$MODDIR/system/bin/ddns-go"
-DDNS_DIR="/data/local/ddns-go"
-DDNS_LOG="$DDNS_DIR/ddns-go.log"
-sleep 30
-mkdir -p "$DDNS_DIR"
-if [ ! -f "$DDNS_BIN" ]; then
-    echo "[$(date)] ERROR: binary not found" >> "$DDNS_LOG"
-    exit 1
-fi
-pgrep -x "ddns-go" > /dev/null 2>&1 && exit 0
-echo "[$(date)] Starting ddns-go..." >> "$DDNS_LOG"
-nohup "$DDNS_BIN" -l :9876 -f 300 -c "$DDNS_DIR" >> "$DDNS_LOG" 2>&1 &
-echo "[$(date)] PID=$!" >> "$DDNS_LOG"
-SCRIPT
+          printf '%s\n' \
+            '#!/system/bin/sh' \
+            'MODDIR="${0%/*}"' \
+            'DDNS_BIN="$MODDIR/system/bin/ddns-go"' \
+            'DDNS_DIR="/data/local/ddns-go"' \
+            'DDNS_LOG="$DDNS_DIR/ddns-go.log"' \
+            'sleep 30' \
+            'mkdir -p "$DDNS_DIR"' \
+            '[ ! -f "$DDNS_BIN" ] && echo "[$(date)] ERROR: binary not found" >> "$DDNS_LOG" && exit 1' \
+            'pgrep -x "ddns-go" > /dev/null 2>&1 && exit 0' \
+            'echo "[$(date)] Starting ddns-go..." >> "$DDNS_LOG"' \
+            'nohup "$DDNS_BIN" -l :9876 -f 300 -c "$DDNS_DIR" >> "$DDNS_LOG" 2>&1 &' \
+            'echo "[$(date)] PID=$!" >> "$DDNS_LOG"' \
+            > "$MODDIR/service.sh"
 
-          cat > "$MODDIR/customize.sh" <<'SCRIPT'
-#!/system/bin/sh
-ui_print "=================================="
-ui_print "   DDNS-Go  KernelSU Module"
-ui_print "=================================="
-set_perm "$MODPATH/system/bin/ddns-go" root root 0755
-set_perm "$MODPATH/service.sh" root root 0755
-ui_print "Done! Reboot to start."
-ui_print "Web UI -> http://<device-ip>:9876"
-SCRIPT
+          printf '%s\n' \
+            '#!/system/bin/sh' \
+            'ui_print "=================================="' \
+            'ui_print "   DDNS-Go  KernelSU Module"' \
+            'ui_print "=================================="' \
+            'set_perm "$MODPATH/system/bin/ddns-go" root root 0755' \
+            'set_perm "$MODPATH/service.sh" root root 0755' \
+            'ui_print "Done! Reboot to start."' \
+            'ui_print "Web UI -> http://<device-ip>:9876"' \
+            > "$MODDIR/customize.sh"
 
-          cat > "$MODDIR/META-INF/com/google/android/updater-script" <<'EOF'
-#MAGISK
-EOF
+          printf '%s\n' '#MAGISK' \
+            > "$MODDIR/META-INF/com/google/android/updater-script"
 
-          cat > "$MODDIR/META-INF/com/google/android/update-binary" <<'SCRIPT'
-#!/sbin/sh
-#MAGISK
-SKIPUNZIP=1
-OUTFD=$2
-ZIPFILE=$3
-. /data/adb/magisk/util_functions.sh 2>/dev/null || \
-. /data/adb/ksu/util_functions.sh    2>/dev/null || true
-install_module
-exit 0
-SCRIPT
+          printf '%s\n' \
+            '#!/sbin/sh' \
+            '#MAGISK' \
+            'SKIPUNZIP=1' \
+            'OUTFD=$2' \
+            'ZIPFILE=$3' \
+            '. /data/adb/magisk/util_functions.sh 2>/dev/null || \' \
+            '. /data/adb/ksu/util_functions.sh    2>/dev/null || true' \
+            'install_module' \
+            'exit 0' \
+            > "$MODDIR/META-INF/com/google/android/update-binary"
 
           chmod 755 "$MODDIR/service.sh" \
                     "$MODDIR/customize.sh" \
@@ -150,17 +146,17 @@ SCRIPT
           tag_name: ksu-${{ steps.version.outputs.version }}
           name: "DDNS-Go ${{ steps.version.outputs.version }} · KSU arm64"
           body: |
-            自动构建自 [jeessy2/ddns-go](https://github.com/jeessy2/ddns-go) 官方 Release。
+            Auto-built from [jeessy2/ddns-go](https://github.com/jeessy2/ddns-go) official release.
 
-            **安装：** KSU Manager → 模块 → 从存储安装 → 选 zip → 重启
+            **Install:** KSU Manager -> Modules -> Install from storage -> select zip -> reboot
 
-            **使用：**
-            - Web UI：`http://<手机IP>:9876`
-            - 配置目录：`/data/local/ddns-go/`
-            - 日志：`/data/local/ddns-go/ddns-go.log`
-            - 停止服务：`su -c 'pkill ddns-go'`
+            **Usage:**
+            - Web UI: `http://<phone-ip>:9876`
+            - Config dir: `/data/local/ddns-go/`
+            - Log: `/data/local/ddns-go/ddns-go.log`
+            - Stop: `su -c 'pkill ddns-go'`
 
-            上游版本：[${{ steps.version.outputs.version }}](https://github.com/jeessy2/ddns-go/releases/tag/${{ steps.version.outputs.version }})
+            Upstream: [${{ steps.version.outputs.version }}](https://github.com/jeessy2/ddns-go/releases/tag/${{ steps.version.outputs.version }})
           files: ${{ env.zip_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
